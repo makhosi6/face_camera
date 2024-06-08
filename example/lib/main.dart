@@ -82,7 +82,7 @@ class _MyAppState extends State<MyApp> {
                 }
                 return const SizedBox.shrink();
               },
-              onCapture: (_){},
+              onCapture: (_) {},
             );
           })),
     );
@@ -90,10 +90,12 @@ class _MyAppState extends State<MyApp> {
 
   Widget _message(String msg) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 55, vertical: 15),
-        child: Text(msg,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontSize: 14, height: 1.5, fontWeight: FontWeight.w400)),
+        child: Text(
+          msg,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+              fontSize: 14, height: 1.5, fontWeight: FontWeight.w400),
+        ),
       );
 
   @override
