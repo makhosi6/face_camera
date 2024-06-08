@@ -73,16 +73,17 @@ class _MyAppState extends State<MyApp> {
               );
             }
             return SmartFaceCamera(
-                controller: controller,
-                messageBuilder: (context, face) {
-                  if (face == null) {
-                    return _message('Place your face in the camera');
-                  }
-                  if (!face.wellPositioned) {
-                    return _message('Center your face in the square');
-                  }
-                  return const SizedBox.shrink();
-                });
+              messageBuilder: (context, face) {
+                if (face == null) {
+                  return _message('Place your face in the camera');
+                }
+                if (!face.wellPositioned) {
+                  return _message('Center your face in the square');
+                }
+                return const SizedBox.shrink();
+              },
+              onCapture: (_){},
+            );
           })),
     );
   }

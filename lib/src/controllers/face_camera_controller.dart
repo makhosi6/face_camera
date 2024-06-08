@@ -47,7 +47,7 @@ class FaceCameraController extends ValueNotifier<FaceCameraState> {
   final FaceDetectorMode performanceMode;
 
   /// Callback invoked when camera captures image.
-  final void Function(File? image) onCapture;
+  void Function(File? image) onCapture;
 
   /// Callback invoked when camera detects face.
   final void Function(Face? face)? onFaceDetected;
@@ -71,56 +71,42 @@ class FaceCameraController extends ValueNotifier<FaceCameraState> {
       }
     }
 
-    value = value.copyWith(
-        availableCameraLens: availableCameraLens,
-        currentCameraLens: currentCameraLens);
+    value = value.copyWith(availableCameraLens: availableCameraLens, currentCameraLens: currentCameraLens);
   }
 
   Future<void> _initCamera() async {
-    final cameras = FaceCamera.cameras
-        .where((c) =>
-            c.lensDirection ==
-            EnumHandler.cameraLensToCameraLensDirection(
-                value.availableCameraLens[value.currentCameraLens]))
-        .toList();
+    final cameras = (await availableCameras()).where((c) => c.lensDirection == CameraLensDirection.front);
 
+    print("CAMERAS: ${cameras.length}");
     if (cameras.isNotEmpty) {
-      final cameraController = CameraController(cameras.first,
-          EnumHandler.imageResolutionToResolutionPreset(imageResolution),
-          enableAudio: enableAudio,
-          imageFormatGroup: Platform.isAndroid
-              ? ImageFormatGroup.nv21
-              : ImageFormatGroup.bgra8888);
+      final cameraController = CameraController(
+          cameras.first, EnumHandler.imageResolutionToResolutionPreset(imageResolution),
+          enableAudio: false,
+          imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.nv21 : ImageFormatGroup.bgra8888);
 
       await cameraController.initialize().whenComplete(() {
-        value = value.copyWith(
-            isInitialized: true, cameraController: cameraController);
+        value = value.copyWith(isInitialized: true, cameraController: cameraController);
       });
 
       await changeFlashMode(value.availableFlashMode.indexOf(defaultFlashMode));
 
-      await cameraController.lockCaptureOrientation(
-          EnumHandler.cameraOrientationToDeviceOrientation(orientation));
+      await cameraController.lockCaptureOrientation(EnumHandler.cameraOrientationToDeviceOrientation(orientation));
     }
 
     startImageStream();
   }
 
   Future<void> changeFlashMode([int? index]) async {
-    final newIndex =
-        index ?? (value.currentFlashMode + 1) % value.availableFlashMode.length;
+    final newIndex = index ?? (value.currentFlashMode + 1) % value.availableFlashMode.length;
     await value.cameraController!
-        .setFlashMode(EnumHandler.cameraFlashModeToFlashMode(
-            value.availableFlashMode[newIndex]))
+        .setFlashMode(EnumHandler.cameraFlashModeToFlashMode(value.availableFlashMode[newIndex]))
         .then((_) {
       value = value.copyWith(currentFlashMode: newIndex);
     });
   }
 
   Future<void> changeCameraLens() async {
-    value = value.copyWith(
-        currentCameraLens:
-            (value.currentCameraLens + 1) % value.availableCameraLens.length);
+    value = value.copyWith(currentCameraLens: (value.currentCameraLens + 1) % value.availableCameraLens.length);
     _initCamera();
   }
 
@@ -175,9 +161,7 @@ class FaceCameraController extends ValueNotifier<FaceCameraState> {
       value = value.copyWith(alreadyCheckingImage: true);
       try {
         await FaceIdentifier.scanImage(
-                cameraImage: cameraImage,
-                controller: cameraController,
-                performanceMode: performanceMode)
+                cameraImage: cameraImage, controller: cameraController, performanceMode: performanceMode)
             .then((result) async {
           value = value.copyWith(detectedFace: result);
 
@@ -236,7 +220,7 @@ class FaceCameraController extends ValueNotifier<FaceCameraState> {
 
   Future<void> initialize() async {
     _getAllAvailableCameraLens();
-    _initCamera();
+    await _initCamera();
   }
 
   /// Enables controls only when camera is initialized.

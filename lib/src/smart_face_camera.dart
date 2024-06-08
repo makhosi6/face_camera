@@ -1,10 +1,11 @@
+import 'dart:io';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
 import '../face_camera.dart';
 import 'controllers/face_camera_state.dart';
 import 'paints/face_painter.dart';
-import 'paints/hole_painter.dart';
 import 'res/builders.dart';
 
 class SmartFaceCamera extends StatefulWidget {
@@ -51,14 +52,18 @@ class SmartFaceCamera extends StatefulWidget {
   final bool autoDisableCaptureControl;
 
   /// The controller for the [SmartFaceCamera] widget.
-  final FaceCameraController controller;
+  // final FaceCameraController controller;
 
-  const SmartFaceCamera(
-      {required this.controller,
-      this.showControls = true,
-      this.showCaptureControl = true,
-      this.showFlashControl = true,
-      this.showCameraLensControl = true,
+  /// Callback invoked when camera captures image.
+  final void Function(File? image) onCapture;
+
+  SmartFaceCamera(
+      {
+      // required this.controller,
+      this.showControls = false,
+      this.showCaptureControl = false,
+      this.showFlashControl = false,
+      this.showCameraLensControl = false,
       this.message,
       this.messageStyle = const TextStyle(
           fontSize: 14, height: 1.5, fontWeight: FontWeight.w400),
@@ -69,6 +74,7 @@ class SmartFaceCamera extends StatefulWidget {
       this.indicatorShape = IndicatorShape.defaultShape,
       this.indicatorAssetImage,
       this.indicatorBuilder,
+      required this.onCapture,
       this.autoDisableCaptureControl = false,
       Key? key})
       : assert(
@@ -83,28 +89,50 @@ class SmartFaceCamera extends StatefulWidget {
 
 class _SmartFaceCameraState extends State<SmartFaceCamera>
     with WidgetsBindingObserver {
+  Face? _face;
+  File? _image;
+
+  late var controller = FaceCameraController(
+    autoCapture: false,
+    defaultCameraLens: CameraLens.front,
+    onCapture: (image) {
+      if (mounted) {
+        setState(() {
+          _image = image;
+        });
+      }
+      widget.onCapture(image);
+    },
+    onFaceDetected: (Face? face) {
+      if (mounted) {
+        setState(() {
+          _face = face;
+        });
+      }
+    },
+  );
   @override
   void initState() {
-    WidgetsBinding.instance.addObserver(this);
-    widget.controller.initialize();
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    controller.initialize();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    widget.controller.stopImageStream();
+    controller.stopImageStream();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.inactive) {
-      widget.controller.stopImageStream();
+      controller.stopImageStream();
     } else if (state == AppLifecycleState.paused) {
-      widget.controller.stopImageStream();
+      controller.stopImageStream();
     } else if (state == AppLifecycleState.resumed) {
-      widget.controller.startImageStream();
+      controller.startImageStream();
     }
   }
 
@@ -112,9 +140,11 @@ class _SmartFaceCameraState extends State<SmartFaceCamera>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     return ValueListenableBuilder<FaceCameraState>(
-      valueListenable: widget.controller,
+      valueListenable: controller,
       builder: (BuildContext context, FaceCameraState value, Widget? child) {
-        final CameraController? cameraController = value.cameraController;
+        final CameraController? cameraController =
+            value.cameraController ?? controller.value.cameraController;
+
         return Stack(
           alignment: Alignment.center,
           children: [
@@ -173,42 +203,62 @@ class _SmartFaceCameraState extends State<SmartFaceCamera>
                     ),
                   ),
                 ),
-              )
-            ] else ...[
-              const Text('No Camera Detected',
-                  style: TextStyle(
-                    fontSize: 18.0,
-                    fontWeight: FontWeight.w500,
-                  )),
-              CustomPaint(
-                size: size,
-                painter: HolePainter(),
-              )
-            ],
-            if (widget.showControls) ...[
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: const EdgeInsets.all(15.0),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+              ),
+              Positioned(
+                bottom: MediaQuery.of(context).size.height * 0.2,
+                child: const Align(
+                  alignment: Alignment.center,
+                  child: AspectRatioOptionsBtnGrp(
+                    setActiveAspectRatioOption: print,
+                    activeAspectRatioOption: PortraitAspectRatio.a916,
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  width: MediaQuery.of(context).size.width,
+                  height: MediaQuery.of(context).size.height * 0.2,
+                  color: Colors.black54,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      if (widget.showFlashControl) ...[
-                        _flashControlWidget(value)
-                      ],
-                      if (widget.showCaptureControl) ...[
-                        const SizedBox(width: 15),
-                        _captureControlWidget(value),
-                        const SizedBox(width: 15)
-                      ],
-                      if (widget.showCameraLensControl) ...[
-                        _lensControlWidget()
-                      ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: widget.messageBuilder
+                                ?.call(context, value.detectedFace) ??
+                            const SizedBox.shrink(),
+                      ),
+                      Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            const CircleSecondaryCameraBtn.icon(
+                              icon: Icons.done_rounded,
+                              iconColor: Color.fromARGB(93, 193, 193, 193),
+                            ),
+                            IOSCameraButton(
+                                onTap: controller.onTakePictureButtonPressed),
+                            const CircleSecondaryCameraBtn.icon(
+                              icon: Icons.flip_camera_android,
+                              iconColor: Color.fromARGB(93, 193, 193, 193),
+                            ),
+                          ]),
                     ],
                   ),
                 ),
               )
-            ]
+            ] else ...[
+              const Text(
+                'No Camera Detected',
+                style: TextStyle(
+                  fontSize: 18.0,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ],
         );
       },
@@ -239,11 +289,11 @@ class _SmartFaceCameraState extends State<SmartFaceCamera>
   /// Determines when to disable the capture control button.
   bool get _disableCapture =>
       widget.autoDisableCaptureControl &&
-      widget.controller.value.detectedFace?.face == null;
+      controller.value.detectedFace?.face == null;
 
   /// Determines the camera controls color.
   Color? get iconColor =>
-      widget.controller.enableControls ? null : Theme.of(context).disabledColor;
+      controller.enableControls ? null : Theme.of(context).disabledColor;
 
   /// Display the control buttons to take pictures.
   Widget _captureControlWidget(FaceCameraState value) {
@@ -251,59 +301,205 @@ class _SmartFaceCameraState extends State<SmartFaceCamera>
       icon: widget.captureControlBuilder?.call(context, value.detectedFace) ??
           CircleAvatar(
               radius: 35,
-              foregroundColor:
-                  widget.controller.enableControls && !_disableCapture
-                      ? null
-                      : Theme.of(context).disabledColor,
+              foregroundColor: controller.enableControls && !_disableCapture
+                  ? null
+                  : Theme.of(context).disabledColor,
               child: const Padding(
                 padding: EdgeInsets.all(8.0),
                 child: Icon(Icons.camera_alt, size: 35),
               )),
-      onPressed: widget.controller.enableControls && !_disableCapture
-          ? widget.controller.onTakePictureButtonPressed
+      onPressed: controller.enableControls && !_disableCapture
+          ? controller.onTakePictureButtonPressed
           : null,
     );
   }
+}
 
-  /// Display the control buttons to switch between flash modes.
-  Widget _flashControlWidget(FaceCameraState value) {
-    final availableFlashMode = value.availableFlashMode;
-    final currentFlashMode = value.currentFlashMode;
-    final icon = availableFlashMode[currentFlashMode] == CameraFlashMode.always
-        ? Icons.flash_on
-        : availableFlashMode[currentFlashMode] == CameraFlashMode.off
-            ? Icons.flash_off
-            : Icons.flash_auto;
+enum PortraitAspectRatio {
+  a23(2 / 3),
+  a916(9 / 16),
+  a45(4 / 5);
+  // a11(1 / 1);
 
-    return IconButton(
-      icon: widget.flashControlBuilder
-              ?.call(context, availableFlashMode[currentFlashMode]) ??
-          CircleAvatar(
-              radius: 25,
-              foregroundColor: iconColor,
-              child: Padding(
-                padding: const EdgeInsets.all(2.0),
-                child: Icon(icon, size: 25),
-              )),
-      onPressed: widget.controller.enableControls
-          ? widget.controller.changeFlashMode
-          : null,
+  const PortraitAspectRatio(this.value);
+
+  final double value;
+
+  @override
+  String toString() => switch (this) {
+        PortraitAspectRatio.a916 => '9:16',
+        PortraitAspectRatio.a23 => '2:3',
+        PortraitAspectRatio.a45 => '4:5',
+        _ => '1:1'
+      };
+
+  double toDouble() => switch (this) {
+        PortraitAspectRatio.a916 => PortraitAspectRatio.a916.value,
+        PortraitAspectRatio.a23 => PortraitAspectRatio.a916.value,
+        PortraitAspectRatio.a45 => PortraitAspectRatio.a916.value,
+        _ => PortraitAspectRatio.a916.value
+      };
+}
+
+class CircleSecondaryCameraBtn extends StatelessWidget {
+  final Widget? child;
+  final IconData? icon;
+  final double size;
+  final double scale;
+  final Color? iconColor;
+  final Color? bgColor;
+
+  const CircleSecondaryCameraBtn.icon({
+    super.key,
+    this.size = 50.0,
+    required IconData this.icon,
+    this.scale = 1.0,
+    this.iconColor,
+    this.bgColor,
+  }) : child = null;
+
+  const CircleSecondaryCameraBtn({
+    super.key,
+    this.size = 50.0,
+    required Widget this.child,
+    this.scale = 1.3,
+    this.iconColor,
+    this.bgColor,
+  }) : icon = null;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      shape: buttonTheme.shape,
+      color: bgColor ?? buttonTheme.backgroundColor,
+      child: Padding(
+        padding: buttonTheme.padding * scale,
+        child: child ??
+            Icon(
+              icon,
+              color: iconColor ?? buttonTheme.foregroundColor,
+              size: buttonTheme.iconSize * scale,
+            ),
+      ),
+    );
+  }
+}
+
+final buttonTheme = _SecondaryCameraButtonTheme();
+
+class _SecondaryCameraButtonTheme {
+  final Color foregroundColor;
+  final Color backgroundColor;
+  final double iconSize;
+  final EdgeInsets padding;
+  final ShapeBorder shape;
+  final bool rotateWithCamera;
+  static const double baseIconSize = 25;
+
+  _SecondaryCameraButtonTheme({
+    this.foregroundColor = Colors.white,
+    this.backgroundColor = Colors.black12,
+    this.iconSize = baseIconSize,
+    this.padding = const EdgeInsets.all(12),
+    this.shape = const CircleBorder(),
+    this.rotateWithCamera = true,
+  });
+}
+
+class IOSCameraButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const IOSCameraButton({super.key, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 72.0,
+        height: 72.0,
+        decoration: const BoxDecoration(
+          color: Color.fromARGB(70, 237, 237, 237),
+          shape: BoxShape.circle,
+        ),
+        child: Center(
+          child: Container(
+            width: 60.0,
+            height: 60.0,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: const Color.fromARGB(90, 222, 222, 222),
+                width: 1.5,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AspectRatioOptionsBtnGrp extends StatelessWidget {
+  final PortraitAspectRatio activeAspectRatioOption;
+
+  final void Function(PortraitAspectRatio) setActiveAspectRatioOption;
+
+  const AspectRatioOptionsBtnGrp({
+    Key? key,
+    required this.activeAspectRatioOption,
+    required this.setActiveAspectRatioOption,
+  }) : super(key: key);
+
+  Widget _buildAspectRatioOptionsButton(PortraitAspectRatio value) {
+    bool isActive = activeAspectRatioOption == value;
+    return GestureDetector(
+      onTap: () => setActiveAspectRatioOption(value),
+      child: AnimatedContainer(
+        padding: EdgeInsets.all(isActive ? 10 : 6),
+        margin: EdgeInsets.symmetric(horizontal: isActive ? 4 : 2),
+        duration: const Duration(milliseconds: 250),
+        width: isActive ? 60 : 40,
+        decoration: BoxDecoration(
+            color: buttonTheme.backgroundColor,
+            borderRadius: BorderRadius.circular(20)),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              value.toString(),
+              style: TextStyle(
+                color: isActive ? Colors.amber[700] : Colors.white,
+                fontSize: 10.0,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
-  /// Display the control buttons to switch between camera lens.
-  Widget _lensControlWidget() {
-    return IconButton(
-        icon: widget.lensControlIcon ??
-            CircleAvatar(
-                radius: 25,
-                foregroundColor: iconColor,
-                child: const Padding(
-                  padding: EdgeInsets.all(2.0),
-                  child: Icon(Icons.switch_camera_sharp, size: 25),
-                )),
-        onPressed: widget.controller.enableControls
-            ? widget.controller.changeCameraLens
-            : null);
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: buttonTheme.backgroundColor,
+            borderRadius: BorderRadius.circular(30),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: PortraitAspectRatio.values
+                .map(_buildAspectRatioOptionsButton)
+                .toList(),
+          ),
+        ),
+      ),
+    );
   }
 }
