@@ -5,7 +5,7 @@ import '../../face_camera.dart';
 /// This class represents the current state of a [FaceCameraController].
 class FaceCameraState {
   /// Create a new [FaceCameraState] instance.
-  const FaceCameraState({
+   FaceCameraState({
     required this.currentCameraLens,
     required this.currentFlashMode,
     required this.isInitialized,
@@ -14,6 +14,7 @@ class FaceCameraState {
     required this.alreadyCheckingImage,
     this.cameraController,
     this.detectedFace,
+    this.faces
   });
 
   /// Create a new [FaceCameraState] instance that is uninitialized.
@@ -26,12 +27,15 @@ class FaceCameraState {
           alreadyCheckingImage: false,
           cameraController: null,
           detectedFace: null,
+          faces: null,
           availableFlashMode: [
             CameraFlashMode.off,
             CameraFlashMode.auto,
             CameraFlashMode.always
           ],
         );
+        ///
+  List<Face>? faces;
 
   /// Camera dependency controller
   final CameraController? cameraController;
@@ -62,6 +66,8 @@ class FaceCameraState {
 
   final DetectedFace? detectedFace;
 
+
+
   /// Create a copy of this state with the given parameters.
   FaceCameraState copyWith({
     List<CameraLens>? availableCameraLens,
@@ -75,6 +81,7 @@ class FaceCameraState {
     CameraController? cameraController,
     List<CameraFlashMode>? availableFlashMode,
     DetectedFace? detectedFace,
+    List<Face>? faces,
   }) {
     return FaceCameraState(
       availableCameraLens: availableCameraLens ?? this.availableCameraLens,
@@ -85,6 +92,7 @@ class FaceCameraState {
       cameraController: cameraController ?? this.cameraController,
       availableFlashMode: availableFlashMode ?? this.availableFlashMode,
       detectedFace: detectedFace ?? this.detectedFace,
+      faces: faces ?? this.faces
     );
   }
 }

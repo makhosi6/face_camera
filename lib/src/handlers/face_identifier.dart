@@ -7,7 +7,7 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import '../models/detected_image.dart';
 
 class FaceIdentifier {
-  static Future<DetectedFace?> scanImage(
+  static Future<FaceScanResult?> scanImage(
       {required CameraImage cameraImage,
       required CameraController? controller,
       required FaceDetectorMode performanceMode}) async {
@@ -18,7 +18,7 @@ class FaceIdentifier {
       DeviceOrientation.landscapeRight: 270,
     };
 
-    DetectedFace? result;
+    FaceScanResult? result;
     final face = await _detectFace(
         performanceMode: performanceMode,
         visionImage:
@@ -84,7 +84,7 @@ class FaceIdentifier {
     );
   }
 
-  static Future<DetectedFace?> _detectFace(
+  static Future<FaceScanResult?> _detectFace(
       {required InputImage? visionImage,
       required FaceDetectorMode performanceMode}) async {
     if (visionImage == null) return null;
@@ -96,14 +96,14 @@ class FaceIdentifier {
     try {
       final List<Face> faces = await faceDetector.processImage(visionImage);
       final faceDetect = _extractFace(faces);
-      return faceDetect;
+      return FaceScanResult(faces: faces, detectedFace: faceDetect);
     } catch (error) {
       debugPrint(error.toString());
       return null;
     }
   }
 
-  static _extractFace(List<Face> faces) {
+  static DetectedFace _extractFace(List<Face> faces) {
     //List<Rect> rect = [];
     bool wellPositioned = faces.isNotEmpty;
     Face? detectedFace;
@@ -157,4 +157,12 @@ class FaceIdentifier {
 
     return DetectedFace(wellPositioned: wellPositioned, face: detectedFace);
   }
+}
+
+
+class FaceScanResult {
+  final DetectedFace detectedFace;
+  final List<Face> faces;
+
+  FaceScanResult({required this.detectedFace, required this.faces}); 
 }

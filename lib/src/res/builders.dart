@@ -7,7 +7,7 @@ typedef FlashControlBuilder = Widget Function(
     BuildContext context, CameraFlashMode mode);
 
 /// Returns message based on face position
-typedef MessageBuilder = Widget Function(
+typedef MessageBuilder = Widget? Function(
     BuildContext context, DetectedFace? detectedFace);
 
 /// Returns widget for detector

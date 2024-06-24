@@ -57,10 +57,10 @@ class SmartFaceCamera extends StatefulWidget {
   /// Callback invoked when camera captures image.
   final void Function(File? image) onCapture;
 
+  Widget backBtn;
+
   SmartFaceCamera(
-      {
-      // required this.controller,
-      this.showControls = false,
+      {this.showControls = false,
       this.showCaptureControl = false,
       this.showFlashControl = false,
       this.showCameraLensControl = false,
@@ -75,64 +75,85 @@ class SmartFaceCamera extends StatefulWidget {
       this.indicatorAssetImage,
       this.indicatorBuilder,
       required this.onCapture,
+      this.backBtn = const SizedBox.shrink(),
       this.autoDisableCaptureControl = false,
-      Key? key})
+      super.key})
       : assert(
             indicatorShape != IndicatorShape.image ||
                 indicatorAssetImage != null,
-            'IndicatorAssetImage must be provided when IndicatorShape is set to image.'),
-        super(key: key);
+            'IndicatorAssetImage must be provided when IndicatorShape is set to image.');
 
   @override
-  State<SmartFaceCamera> createState() => _SmartFaceCameraState();
+  State<SmartFaceCamera> createState() => SmartFaceCameraState();
 }
 
-class _SmartFaceCameraState extends State<SmartFaceCamera>
+class SmartFaceCameraState extends State<SmartFaceCamera>
     with WidgetsBindingObserver {
   Face? _face;
   File? _image;
 
-  late var controller = FaceCameraController(
-    autoCapture: false,
-    defaultCameraLens: CameraLens.front,
-    onCapture: (image) {
-      if (mounted) {
-        setState(() {
-          _image = image;
-        });
-      }
-      widget.onCapture(image);
-    },
-    onFaceDetected: (Face? face) {
-      if (mounted) {
-        setState(() {
-          _face = face;
-        });
-      }
-    },
-  );
+  ///
+  late FaceCameraController controller;
+
+  ///
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    controller.initialize();
+
+    controller = FaceCameraController(
+      autoCapture: false,
+      defaultCameraLens: CameraLens.front,
+      onCapture: (image) {
+        if (mounted) {
+          setState(() {
+            _image = image;
+          });
+        }
+        widget.onCapture(image);
+      },
+      onFaceDetected: (Face? face) {
+        if (mounted) {
+          setState(() {
+            _face = face;
+          });
+        }
+      },
+    )..initialize();
+  }
+
+  void onDispose() {
+    try {
+      controller.dispose();
+    } catch (e) {
+      print(e);
+    }
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    controller.stopImageStream();
-    super.dispose();
+    try {
+      WidgetsBinding.instance.removeObserver(this);
+      controller.dispose();
+    } catch (e) {
+      print(e);
+    } finally {
+      super.dispose();
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive) {
-      controller.stopImageStream();
-    } else if (state == AppLifecycleState.paused) {
-      controller.stopImageStream();
-    } else if (state == AppLifecycleState.resumed) {
-      controller.startImageStream();
+    try {
+      if (state == AppLifecycleState.inactive) {
+        controller.dispose();
+      } else if (state == AppLifecycleState.paused) {
+        controller.dispose();
+      } else if (state == AppLifecycleState.resumed) {
+        initState();
+      }
+    } catch (e) {
+      print(e);
     }
   }
 
@@ -166,41 +187,61 @@ class _SmartFaceCameraState extends State<SmartFaceCamera>
                           children: <Widget>[
                             _cameraDisplayWidget(value),
                             if (value.detectedFace != null &&
-                                widget.indicatorShape !=
-                                    IndicatorShape.none) ...[
-                              SizedBox(
-                                  width:
-                                      cameraController.value.previewSize!.width,
-                                  height: cameraController
-                                      .value.previewSize!.height,
-                                  child: widget.indicatorBuilder?.call(
-                                          context,
-                                          value.detectedFace,
-                                          Size(
-                                            cameraController
-                                                .value.previewSize!.height,
-                                            cameraController
-                                                .value.previewSize!.width,
-                                          )) ??
-                                      CustomPaint(
-                                        painter: FacePainter(
-                                            face: value.detectedFace!.face,
-                                            indicatorShape:
-                                                widget.indicatorShape,
-                                            indicatorAssetImage:
-                                                widget.indicatorAssetImage,
-                                            imageSize: Size(
-                                              cameraController
-                                                  .value.previewSize!.height,
-                                              cameraController
-                                                  .value.previewSize!.width,
-                                            )),
-                                      ))
-                            ]
+                                widget.indicatorShape != IndicatorShape.none)
+                              ...(value.faces
+                                      ?.map(
+                                        (face) => SizedBox(
+                                          width: cameraController
+                                              .value.previewSize!.width,
+                                          height: cameraController
+                                              .value.previewSize!.height,
+                                          child: widget.indicatorBuilder?.call(
+                                                  context,
+                                                  DetectedFace(
+                                                      face: face,
+                                                      wellPositioned: false),
+                                                  Size(
+                                                    cameraController.value
+                                                        .previewSize!.height,
+                                                    cameraController.value
+                                                        .previewSize!.width,
+                                                  )) ??
+                                              CustomPaint(
+                                                painter: FacePainter(
+                                                    face: face,
+                                                    indicatorShape:
+                                                        widget.indicatorShape,
+                                                    indicatorAssetImage: widget
+                                                        .indicatorAssetImage,
+                                                    imageSize: Size(
+                                                      cameraController.value
+                                                          .previewSize!.height,
+                                                      cameraController.value
+                                                          .previewSize!.width,
+                                                    )),
+                                              ),
+                                        ),
+                                      )
+                                      .toList() ??
+                                  [])
                           ],
                         ),
                       ),
                     ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  width: size.width,
+                  height: size.height * 0.15,
+                  padding: EdgeInsets.only(top: 20),
+                  color: const Color.fromARGB(116, 0, 0, 0),
+                  child: Row(
+                    children: [widget.backBtn],
                   ),
                 ),
               ),
@@ -228,8 +269,15 @@ class _SmartFaceCameraState extends State<SmartFaceCamera>
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: widget.messageBuilder
-                                ?.call(context, value.detectedFace) ??
+                        child: (widget.messageBuilder
+                                ?.call(context, value.detectedFace)) ??
+                            ((controller.value.faces?.isEmpty == true
+                                ? const Text(
+                                    'Please ensure there is at least one face on frame')
+                                : ((controller.value.faces?.length ?? 0) > 1)
+                                    ? const Text(
+                                        'Please ensure only one face is in frame')
+                                    : null)) ??
                             const SizedBox.shrink(),
                       ),
                       Row(
@@ -240,7 +288,13 @@ class _SmartFaceCameraState extends State<SmartFaceCamera>
                               iconColor: Color.fromARGB(93, 193, 193, 193),
                             ),
                             IOSCameraButton(
-                                onTap: controller.onTakePictureButtonPressed),
+                              onTap: ((widget.messageBuilder?.call(
+                                              context, value.detectedFace) ==
+                                          null) &&
+                                      controller.value.faces?.length == 1)
+                                  ? controller.onTakePictureButtonPressed
+                                  : () {},
+                            ),
                             const CircleSecondaryCameraBtn.icon(
                               icon: Icons.flip_camera_android,
                               iconColor: Color.fromARGB(93, 193, 193, 193),
@@ -271,8 +325,16 @@ class _SmartFaceCameraState extends State<SmartFaceCamera>
     if (cameraController != null && cameraController.value.isInitialized) {
       return CameraPreview(cameraController, child: Builder(builder: (context) {
         if (widget.messageBuilder != null) {
-          return widget.messageBuilder!.call(context, value.detectedFace);
+          return (widget.messageBuilder?.call(context, value.detectedFace)) ??
+              ((controller.value.faces?.isEmpty == true
+                  ? const Text(
+                      'Please ensure there is at least one face on frame')
+                  : ((controller.value.faces?.length ?? 0) > 1)
+                      ? const Text('Please ensure only one face is in frame')
+                      : null)) ??
+              const SizedBox.shrink();
         }
+
         if (widget.message != null) {
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 55, vertical: 15),

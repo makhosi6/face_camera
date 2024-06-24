@@ -163,12 +163,12 @@ class FaceCameraController extends ValueNotifier<FaceCameraState> {
         await FaceIdentifier.scanImage(
                 cameraImage: cameraImage, controller: cameraController, performanceMode: performanceMode)
             .then((result) async {
-          value = value.copyWith(detectedFace: result);
+          value = value.copyWith(detectedFace: result?.detectedFace, faces: result?.faces);
 
           if (result != null) {
             try {
-              if (result.wellPositioned) {
-                onFaceDetected?.call(result.face);
+              if (result.detectedFace.wellPositioned) {
+                onFaceDetected?.call(result.detectedFace.face);
                 if (autoCapture) {
                   onTakePictureButtonPressed();
                 }
