@@ -102,7 +102,7 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
     WidgetsBinding.instance.addObserver(this);
 
     controller = FaceCameraController(
-      autoCapture: false,
+      autoCapture: true,
       defaultCameraLens: CameraLens.front,
       onCapture: (image) {
         if (mounted) {
@@ -209,6 +209,16 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
                                               CustomPaint(
                                                 painter: FacePainter(
                                                     face: face,
+                                                    closeEnough: ((widget
+                                                                .messageBuilder
+                                                                ?.call(
+                                                                    context,
+                                                                    value
+                                                                        .detectedFace) ==
+                                                            null) &&
+                                                        controller.value.faces
+                                                                ?.length ==
+                                                            1),
                                                     indicatorShape:
                                                         widget.indicatorShape,
                                                     indicatorAssetImage: widget
@@ -269,16 +279,19 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: (widget.messageBuilder
-                                ?.call(context, value.detectedFace)) ??
-                            ((controller.value.faces?.isEmpty == true
-                                ? const Text(
-                                    'Please ensure there is at least one face on frame')
-                                : ((controller.value.faces?.length ?? 0) > 1)
+                        child: (controller.value.detectedFace?.comment != null)
+                            ? Text(controller.value.detectedFace?.comment ?? 'Please move closer')
+                            : (widget.messageBuilder
+                                    ?.call(context, value.detectedFace)) ??
+                                ((controller.value.faces?.isEmpty == true
                                     ? const Text(
-                                        'Please ensure only one face is in frame')
-                                    : null)) ??
-                            const SizedBox.shrink(),
+                                        'Please ensure there is at least one face on frame')
+                                    : ((controller.value.faces?.length ?? 0) >
+                                            1)
+                                        ? const Text(
+                                            'Please ensure only one face is in frame')
+                                        : null)) ??
+                                const SizedBox.shrink(),
                       ),
                       Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -324,6 +337,10 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
     final CameraController? cameraController = value.cameraController;
     if (cameraController != null && cameraController.value.isInitialized) {
       return CameraPreview(cameraController, child: Builder(builder: (context) {
+        if (controller.value.detectedFace?.comment != null) {
+          return Text(controller.value.detectedFace?.comment ?? 'Please move closer');
+        }
+
         if (widget.messageBuilder != null) {
           return (widget.messageBuilder?.call(context, value.detectedFace)) ??
               ((controller.value.faces?.isEmpty == true

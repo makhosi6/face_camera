@@ -106,20 +106,38 @@ class FaceIdentifier {
   static DetectedFace _extractFace(List<Face> faces) {
     //List<Rect> rect = [];
     bool wellPositioned = faces.isNotEmpty;
+    String? comment;
     Face? detectedFace;
+
+    /// Smaller minimum face size
+    double minFaceSize = 30.0;
+
+    /// Larger rotation angle allowed on Y-axis
+    double maxRotationY = 30.0;
+
+    /// Larger rotation angle allowed on Z-axis
+    double maxRotationZ = 30.0;
 
     for (Face face in faces) {
       // rect.add(face.boundingBox);
       detectedFace = face;
 
-      // Head is rotated to the right rotY degrees
-      if (face.headEulerAngleY! > 2 || face.headEulerAngleY! < -2) {
+      // Check face size
+      if (face.boundingBox.width < minFaceSize ||
+          face.boundingBox.height < minFaceSize) {
         wellPositioned = false;
+        comment = 'face size too small';
+      }
+      // Head is rotated to the right rotY degrees
+      if ((face.headEulerAngleY ?? 0).abs() > maxRotationY) {
+        wellPositioned = false;
+        comment = 'your head/face is rotated';
       }
 
       // Head is tilted sideways rotZ degrees
-      if (face.headEulerAngleZ! > 2 || face.headEulerAngleZ! < -2) {
+      if ((face.headEulerAngleZ ?? 0).abs() > maxRotationZ) {
         wellPositioned = false;
+        comment = 'your head/face is tilted sideways';
       }
 
       // If landmark detection was enabled with FaceDetectorOptions (mouth, ears,
@@ -140,29 +158,33 @@ class FaceIdentifier {
           leftMouth == null ||
           noseBase == null) {
         wellPositioned = false;
+        comment =
+            'Missing face landmarks, (mouth, ears, eyes, cheeks, and nose should be visible)';
       }
 
       if (face.leftEyeOpenProbability != null) {
         if (face.leftEyeOpenProbability! < 0.5) {
           wellPositioned = false;
+          comment = 'left eye closed';
         }
       }
 
       if (face.rightEyeOpenProbability != null) {
         if (face.rightEyeOpenProbability! < 0.5) {
           wellPositioned = false;
+          comment = 'right eye closed';
         }
       }
     }
 
-    return DetectedFace(wellPositioned: wellPositioned, face: detectedFace);
+    return DetectedFace(
+        wellPositioned: wellPositioned, face: detectedFace, comment: comment);
   }
 }
-
 
 class FaceScanResult {
   final DetectedFace detectedFace;
   final List<Face> faces;
 
-  FaceScanResult({required this.detectedFace, required this.faces}); 
+  FaceScanResult({required this.detectedFace, required this.faces});
 }

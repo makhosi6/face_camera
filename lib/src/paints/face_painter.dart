@@ -7,6 +7,7 @@ class FacePainter extends CustomPainter {
   FacePainter(
       {required this.imageSize,
       this.face,
+     required this.closeEnough,
       required this.indicatorShape,
       this.indicatorAssetImage});
   final Size imageSize;
@@ -14,13 +15,15 @@ class FacePainter extends CustomPainter {
   final Face? face;
   final IndicatorShape indicatorShape;
   final String? indicatorAssetImage;
+final bool? closeEnough;
+
   @override
   void paint(Canvas canvas, Size size) {
     if (face == null) return;
 
     Paint paint;
 
-    if (face!.headEulerAngleY! > 10 || face!.headEulerAngleY! < -10) {
+    if (closeEnough == false || (face!.headEulerAngleY! > 10 || face!.headEulerAngleY! < -10)) {
       paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3.0
