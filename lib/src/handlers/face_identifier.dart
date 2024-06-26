@@ -112,10 +112,10 @@ class FaceIdentifier {
     /// Smaller minimum face size
     double minFaceSize = 30.0;
 
-    /// Larger rotation angle allowed on Y-axis
+    /// Larger rotation angle allowed on Y-axis (ideally)
     double maxRotationY = 30.0;
 
-    /// Larger rotation angle allowed on Z-axis
+    /// Larger rotation angle allowed on Z-axis (ideally)
     double maxRotationZ = 30.0;
 
     for (Face face in faces) {
@@ -129,13 +129,13 @@ class FaceIdentifier {
         comment = 'face size too small';
       }
       // Head is rotated to the right rotY degrees
-      if ((face.headEulerAngleY ?? 0).abs() > maxRotationY) {
+      if (face.headEulerAngleY! > 2 || face.headEulerAngleY! < -2) {
         wellPositioned = false;
         comment = 'your head/face is rotated';
       }
 
       // Head is tilted sideways rotZ degrees
-      if ((face.headEulerAngleZ ?? 0).abs() > maxRotationZ) {
+     if (face.headEulerAngleZ! > 2 || face.headEulerAngleZ! < -2) {
         wellPositioned = false;
         comment = 'your head/face is tilted sideways';
       }
