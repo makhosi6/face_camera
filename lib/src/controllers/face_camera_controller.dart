@@ -22,6 +22,7 @@ class FaceCameraController extends ValueNotifier<FaceCameraState> {
     this.orientation = CameraOrientation.portraitUp,
     this.performanceMode = FaceDetectorMode.fast,
     required this.onCapture,
+    required this.onProcessRawImageData,
     this.onFaceDetected,
   }) : super(FaceCameraState.uninitialized());
 
@@ -48,6 +49,9 @@ class FaceCameraController extends ValueNotifier<FaceCameraState> {
 
   /// Callback invoked when camera captures image.
   void Function(File? image) onCapture;
+
+  ///
+  void Function(CameraImage image) onProcessRawImageData;
 
   /// Callback invoked when camera detects face.
   final void Function(Face? face)? onFaceDetected;
@@ -81,8 +85,7 @@ class FaceCameraController extends ValueNotifier<FaceCameraState> {
     if (cameras.isNotEmpty) {
       final cameraController = CameraController(
           cameras.first, EnumHandler.imageResolutionToResolutionPreset(imageResolution),
-          enableAudio: false,
-          imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.nv21 : ImageFormatGroup.bgra8888);
+          enableAudio: false, imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.nv21 : ImageFormatGroup.bgra8888);
 
       await cameraController.initialize().whenComplete(() {
         value = value.copyWith(isInitialized: true, cameraController: cameraController);
@@ -155,11 +158,23 @@ class FaceCameraController extends ValueNotifier<FaceCameraState> {
     }
   }
 
+  double _calculateImageBrightness(CameraImage image) {
+    final bytes = image.planes[0].bytes;
+    int totalBrightness = 0;
+    for (int i = 0; i < bytes.length; i += image.planes[0].bytesPerPixel!) {
+      totalBrightness += bytes[i];
+    }
+    print("TOTAL BRIGHTNESS: $totalBrightness \n\n\n");
+    return totalBrightness / bytes.length;
+  }
+
   void _processImage(CameraImage cameraImage) async {
     final CameraController? cameraController = value.cameraController;
     if (!value.alreadyCheckingImage) {
       value = value.copyWith(alreadyCheckingImage: true);
       try {
+        final brightness = _calculateImageBrightness(cameraImage);
+        print("FINAL BRIGHTNESS: $brightness \n\n\n");
         await FaceIdentifier.scanImage(
                 cameraImage: cameraImage, controller: cameraController, performanceMode: performanceMode)
             .then((result) async {
@@ -169,7 +184,7 @@ class FaceCameraController extends ValueNotifier<FaceCameraState> {
             try {
               if (result.detectedFace.wellPositioned) {
                 onFaceDetected?.call(result.detectedFace.face);
-                if (autoCapture) {
+                if (autoCapture && brightness > 120) {
                   onTakePictureButtonPressed();
                 }
               }
@@ -182,6 +197,8 @@ class FaceCameraController extends ValueNotifier<FaceCameraState> {
       } catch (ex, stack) {
         value = value.copyWith(alreadyCheckingImage: false);
         logError('$ex, $stack');
+      } finally {
+        onProcessRawImageData(cameraImage);
       }
     }
   }

@@ -8,7 +8,7 @@ typedef FlashControlBuilder = Widget Function(
 
 /// Returns message based on face position
 typedef MessageBuilder = Widget? Function(
-    BuildContext context, DetectedFace? detectedFace);
+    BuildContext context, DetectedFace? detectedFace, bool? hasPoorLighting, num brightnessLevel);
 
 /// Returns widget for detector
 typedef IndicatorBuilder = Widget Function(

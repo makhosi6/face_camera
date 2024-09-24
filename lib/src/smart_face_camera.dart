@@ -65,8 +65,7 @@ class SmartFaceCamera extends StatefulWidget {
       this.showFlashControl = false,
       this.showCameraLensControl = false,
       this.message,
-      this.messageStyle = const TextStyle(
-          fontSize: 14, height: 1.5, fontWeight: FontWeight.w400),
+      this.messageStyle = const TextStyle(fontSize: 14, height: 1.5, fontWeight: FontWeight.w400),
       this.captureControlBuilder,
       this.lensControlIcon,
       this.flashControlBuilder,
@@ -78,19 +77,18 @@ class SmartFaceCamera extends StatefulWidget {
       this.backBtn = const SizedBox.shrink(),
       this.autoDisableCaptureControl = false,
       super.key})
-      : assert(
-            indicatorShape != IndicatorShape.image ||
-                indicatorAssetImage != null,
+      : assert(indicatorShape != IndicatorShape.image || indicatorAssetImage != null,
             'IndicatorAssetImage must be provided when IndicatorShape is set to image.');
 
   @override
   State<SmartFaceCamera> createState() => SmartFaceCameraState();
 }
 
-class SmartFaceCameraState extends State<SmartFaceCamera>
-    with WidgetsBindingObserver {
+class SmartFaceCameraState extends State<SmartFaceCamera> with WidgetsBindingObserver {
   Face? _face;
   File? _image;
+  bool _hasPoorLighting = false;
+  num _brightnessLevel = 0;
 
   ///
   late FaceCameraController controller;
@@ -105,12 +103,22 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
       autoCapture: true,
       defaultCameraLens: CameraLens.front,
       onCapture: (image) {
-        if (mounted) {
+        if (mounted && !_hasPoorLighting) {
           setState(() {
             _image = image;
           });
         }
         widget.onCapture(image);
+      },
+      onProcessRawImageData: (image) {
+        final brightness = calculateImageBrightness(image);
+
+        if (mounted) {
+          setState(() {
+            _hasPoorLighting = brightness < 120;
+              _brightnessLevel = brightness;
+          });
+        }
       },
       onFaceDetected: (Face? face) {
         if (mounted) {
@@ -128,6 +136,15 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
     } catch (e) {
       print(e);
     }
+  }
+
+  double calculateImageBrightness(CameraImage image) {
+    final bytes = image.planes[0].bytes;
+    int totalBrightness = 0;
+    for (int i = 0; i < bytes.length; i += image.planes[0].bytesPerPixel!) {
+      totalBrightness += bytes[i];
+    }
+    return totalBrightness / bytes.length;
   }
 
   @override
@@ -150,7 +167,37 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
       } else if (state == AppLifecycleState.paused) {
         controller.dispose();
       } else if (state == AppLifecycleState.resumed) {
-        initState();
+        setState(() {
+          controller = FaceCameraController(
+            autoCapture: true,
+            defaultCameraLens: CameraLens.front,
+            onCapture: (image) {
+              if (mounted && !_hasPoorLighting) {
+                setState(() {
+                  _image = image;
+                });
+              }
+              widget.onCapture(image);
+            },
+            onProcessRawImageData: (CameraImage image) {
+              final brightness = calculateImageBrightness(image);
+
+              if (mounted) {
+                setState(() {
+                  _hasPoorLighting = brightness < 120;
+                  _brightnessLevel = brightness;
+                });
+              }
+            },
+            onFaceDetected: (Face? face) {
+              if (mounted) {
+                setState(() {
+                  _face = face;
+                });
+              }
+            },
+          )..initialize();
+        });
       }
     } catch (e) {
       print(e);
@@ -163,14 +210,12 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
     return ValueListenableBuilder<FaceCameraState>(
       valueListenable: controller,
       builder: (BuildContext context, FaceCameraState value, Widget? child) {
-        final CameraController? cameraController =
-            value.cameraController ?? controller.value.cameraController;
+        final CameraController? cameraController = value.cameraController ?? controller.value.cameraController;
 
         return Stack(
           alignment: Alignment.center,
           children: [
-            if (cameraController != null &&
-                cameraController.value.isInitialized) ...[
+            if (cameraController != null && cameraController.value.isInitialized) ...[
               Transform.scale(
                 scale: 1.0,
                 child: AspectRatio(
@@ -186,48 +231,31 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
                           fit: StackFit.expand,
                           children: <Widget>[
                             _cameraDisplayWidget(value),
-                            if (value.detectedFace != null &&
-                                widget.indicatorShape != IndicatorShape.none)
+                            if (value.detectedFace != null && widget.indicatorShape != IndicatorShape.none)
                               ...(value.faces
                                       ?.map(
                                         (face) => SizedBox(
-                                          width: cameraController
-                                              .value.previewSize!.width,
-                                          height: cameraController
-                                              .value.previewSize!.height,
+                                          width: cameraController.value.previewSize!.width,
+                                          height: cameraController.value.previewSize!.height,
                                           child: widget.indicatorBuilder?.call(
                                                   context,
-                                                  DetectedFace(
-                                                      face: face,
-                                                      wellPositioned: false),
+                                                  DetectedFace(face: face, wellPositioned: false),
                                                   Size(
-                                                    cameraController.value
-                                                        .previewSize!.height,
-                                                    cameraController.value
-                                                        .previewSize!.width,
+                                                    cameraController.value.previewSize!.height,
+                                                    cameraController.value.previewSize!.width,
                                                   )) ??
                                               CustomPaint(
                                                 painter: FacePainter(
                                                     face: face,
-                                                    closeEnough: ((widget
-                                                                .messageBuilder
-                                                                ?.call(
-                                                                    context,
-                                                                    value
-                                                                        .detectedFace) ==
+                                                    closeEnough: ((widget.messageBuilder
+                                                                ?.call(context, value.detectedFace, _hasPoorLighting, _brightnessLevel) ==
                                                             null) &&
-                                                        controller.value.faces
-                                                                ?.length ==
-                                                            1),
-                                                    indicatorShape:
-                                                        widget.indicatorShape,
-                                                    indicatorAssetImage: widget
-                                                        .indicatorAssetImage,
+                                                        controller.value.faces?.length == 1),
+                                                    indicatorShape: widget.indicatorShape,
+                                                    indicatorAssetImage: widget.indicatorAssetImage,
                                                     imageSize: Size(
-                                                      cameraController.value
-                                                          .previewSize!.height,
-                                                      cameraController.value
-                                                          .previewSize!.width,
+                                                      cameraController.value.previewSize!.height,
+                                                      cameraController.value.previewSize!.width,
                                                     )),
                                               ),
                                         ),
@@ -280,9 +308,15 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
                       Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         child: (controller.value.detectedFace?.comment != null)
-                            ? Text(controller.value.detectedFace?.comment ?? 'Please move closer')
-                            : (widget.messageBuilder
-                                    ?.call(context, value.detectedFace)) ??
+                            ? Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 55, vertical: 15),
+                                child: Text(
+                                  controller.value.detectedFace?.comment ?? 'Please move closer',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.white, fontStyle: FontStyle.italic),
+                                ),
+                              )
+                            : (widget.messageBuilder?.call(context, value.detectedFace, _hasPoorLighting,_brightnessLevel)) ??
                                 ((controller.value.faces?.isEmpty == true
                                     ? const Text(
                                         'Please ensure there is at least one face on frame')
@@ -293,26 +327,23 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
                                         : null)) ??
                                 const SizedBox.shrink(),
                       ),
-                      Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            const CircleSecondaryCameraBtn.icon(
-                              icon: Icons.done_rounded,
-                              iconColor: Color.fromARGB(93, 193, 193, 193),
-                            ),
-                            IOSCameraButton(
-                              onTap: ((widget.messageBuilder?.call(
-                                              context, value.detectedFace) ==
-                                          null) &&
+                      Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                        const CircleSecondaryCameraBtn.icon(
+                          icon: Icons.done_rounded,
+                          iconColor: Color.fromARGB(93, 193, 193, 193),
+                        ),
+                        IOSCameraButton(
+                          onTap:
+                              ((widget.messageBuilder?.call(context, value.detectedFace, _hasPoorLighting, _brightnessLevel) == null) &&
                                       controller.value.faces?.length == 1)
                                   ? controller.onTakePictureButtonPressed
                                   : () {},
-                            ),
-                            const CircleSecondaryCameraBtn.icon(
-                              icon: Icons.flip_camera_android,
-                              iconColor: Color.fromARGB(93, 193, 193, 193),
-                            ),
-                          ]),
+                        ),
+                        const CircleSecondaryCameraBtn.icon(
+                          icon: Icons.flip_camera_android,
+                          iconColor: Color.fromARGB(93, 193, 193, 193),
+                        ),
+                      ]),
                     ],
                   ),
                 ),
@@ -338,14 +369,20 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
     if (cameraController != null && cameraController.value.isInitialized) {
       return CameraPreview(cameraController, child: Builder(builder: (context) {
         if (controller.value.detectedFace?.comment != null) {
-          return Text(controller.value.detectedFace?.comment ?? 'Please move closer');
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 55, vertical: 15),
+            child: Text(
+              controller.value.detectedFace?.comment ?? 'Please move closer',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontStyle: FontStyle.italic),
+            ),
+          );
         }
 
         if (widget.messageBuilder != null) {
-          return (widget.messageBuilder?.call(context, value.detectedFace)) ??
+          return (widget.messageBuilder?.call(context, value.detectedFace, _hasPoorLighting, _brightnessLevel)) ??
               ((controller.value.faces?.isEmpty == true
-                  ? const Text(
-                      'Please ensure there is at least one face on frame')
+                  ? const Text('Please ensure there is at least one face on frame')
                   : ((controller.value.faces?.length ?? 0) > 1)
                       ? const Text('Please ensure only one face is in frame')
                       : null)) ??
@@ -355,8 +392,7 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
         if (widget.message != null) {
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 55, vertical: 15),
-            child: Text(widget.message!,
-                textAlign: TextAlign.center, style: widget.messageStyle),
+            child: Text(widget.message!, textAlign: TextAlign.center, style: widget.messageStyle),
           );
         }
         return const SizedBox.shrink();
@@ -366,13 +402,10 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
   }
 
   /// Determines when to disable the capture control button.
-  bool get _disableCapture =>
-      widget.autoDisableCaptureControl &&
-      controller.value.detectedFace?.face == null;
+  bool get _disableCapture => widget.autoDisableCaptureControl && controller.value.detectedFace?.face == null;
 
   /// Determines the camera controls color.
-  Color? get iconColor =>
-      controller.enableControls ? null : Theme.of(context).disabledColor;
+  Color? get iconColor => controller.enableControls ? null : Theme.of(context).disabledColor;
 
   /// Display the control buttons to take pictures.
   Widget _captureControlWidget(FaceCameraState value) {
@@ -380,16 +413,12 @@ class SmartFaceCameraState extends State<SmartFaceCamera>
       icon: widget.captureControlBuilder?.call(context, value.detectedFace) ??
           CircleAvatar(
               radius: 35,
-              foregroundColor: controller.enableControls && !_disableCapture
-                  ? null
-                  : Theme.of(context).disabledColor,
+              foregroundColor: controller.enableControls && !_disableCapture ? null : Theme.of(context).disabledColor,
               child: const Padding(
                 padding: EdgeInsets.all(8.0),
                 child: Icon(Icons.camera_alt, size: 35),
               )),
-      onPressed: controller.enableControls && !_disableCapture
-          ? controller.onTakePictureButtonPressed
-          : null,
+      onPressed: controller.enableControls && !_disableCapture ? controller.onTakePictureButtonPressed : null,
     );
   }
 }
@@ -539,9 +568,7 @@ class AspectRatioOptionsBtnGrp extends StatelessWidget {
         margin: EdgeInsets.symmetric(horizontal: isActive ? 4 : 2),
         duration: const Duration(milliseconds: 250),
         width: isActive ? 60 : 40,
-        decoration: BoxDecoration(
-            color: buttonTheme.backgroundColor,
-            borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: buttonTheme.backgroundColor, borderRadius: BorderRadius.circular(20)),
         child: Center(
           child: Padding(
             padding: const EdgeInsets.only(bottom: 4),
@@ -573,9 +600,7 @@ class AspectRatioOptionsBtnGrp extends StatelessWidget {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: PortraitAspectRatio.values
-                .map(_buildAspectRatioOptionsButton)
-                .toList(),
+            children: PortraitAspectRatio.values.map(_buildAspectRatioOptionsButton).toList(),
           ),
         ),
       ),
